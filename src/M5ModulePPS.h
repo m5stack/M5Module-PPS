@@ -31,6 +31,7 @@ class M5ModulePPS {
     uint8_t _sda;
     uint8_t _scl;
     uint32_t _speed;
+    uint32_t _micros;
     bool writeBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length);
     bool readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer, uint8_t length);
     void float_to_bytes(float s, uint8_t *d);

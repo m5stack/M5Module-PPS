@@ -19,17 +19,40 @@ bool M5ModulePPS::begin(TwoWire *wire, uint8_t sda, uint8_t scl, uint8_t addr,
     }
 }
 
+// If a second I2c transaction is made to the module, less than 100us after the end of the previous call we get NACK errors
+// The underlying cause looks like an issue in the latest ESP-IF I2C library, but until that is fixed we need a workaround
+// The below wrappers for the I2C functions ensure the minimum gap is enforced, with minimal performance impact even with
+// tight looping to the PPS libraries.  It allows applications to run indefinitely vs a few seconds (with the demo app on a
+// Core2).  Once the I2C library is fixed, simply remove the MIN_GAP definition to disable the workaround.
+#define MIN_GAP 100
+
+#ifdef MIN_GAP
+  #define I2C_ENTRY() {uint32_t gap=micros()-_micros;if(gap<MIN_GAP)delayMicroseconds(MIN_GAP-gap);}
+  #define I2C_EXIT() {_micros=micros();}
+#else
+  #define I2C_ENTRY()
+  #define I2C_EXIT()
+#endif
+
 bool M5ModulePPS::writeBytes(uint8_t addr, uint8_t reg, uint8_t *buffer,
                              uint8_t length) {
+    bool rc=false;
+    I2C_ENTRY();
+
     _wire->beginTransmission(addr);
     _wire->write(reg);
     _wire->write(buffer, length);
-    if (_wire->endTransmission() == 0) return true;
-    return false;
+    if (_wire->endTransmission() == 0) rc=true;
+
+    I2C_EXIT();
+    return rc;
 }
 
 bool M5ModulePPS::readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer,
-                            uint8_t length) {
+                                uint8_t length) {
+    bool rc=false;
+    I2C_ENTRY();
+
     uint8_t index = 0;
     _wire->beginTransmission(addr);
     _wire->write(reg);
@@ -38,9 +61,11 @@ bool M5ModulePPS::readBytes(uint8_t addr, uint8_t reg, uint8_t *buffer,
         for (uint8_t i = 0; i < length; i++) {
             buffer[index++] = _wire->read();
         }
-        return true;
+        rc=true;
     }
-    return false;
+
+    I2C_EXIT();
+    return rc;
 }
 
 void M5ModulePPS::float_to_bytes(float s, uint8_t *d) {
